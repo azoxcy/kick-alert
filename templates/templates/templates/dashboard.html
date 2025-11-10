@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>لوحة التحكم - Kick Monitor</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: #f5f5f5;
+            min-height: 100vh;
+        }
+        .navbar {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .navbar h1 {
+            font-size: 24px;
+        }
+        .navbar-right {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+        }
+        .btn {
+            padding: 8px 20px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.3s;
+        }
+        .btn-light {
+            background: white;
+            color: #667eea;
+        }
+        .btn-light:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+        }
+        .btn-primary {
+            background: #667eea;
+            color: white;
+        }
+        .btn-primary:hover {
+            background: #5568d3;
+        }
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 30px auto;
+            padding: 0 20px;
+        }
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 30px;
+            box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+            margin-bottom: 30px;
+        }
+        h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 22px;
+        }
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 2fr auto;
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        input {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 15px;
+            transition: all 0.3s;
+        }
+        input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .monitors-list {
+            display: grid;
+            gap: 15px;
+        }
+        .monitor-item {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border: 2px solid #e9ecef;
+            transition: all 0.3s;
+        }
+        .monitor-item:hover {
+            border-color: #667eea;
+            transform: translateX(-5px);
+        }
+        .monitor-info h3 {
+            color: #667eea;
+            margin-bottom: 8px;
+            font-size: 18px;
+        }
+        .monitor-keywords {
+            color: #666;
+            font-size: 14px;
+        }
+        .keyword-badge {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            margin-left: 5px;
+            font-size: 13px;
+        }
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        .empty-state-icon {
+            font-size: 64px;
+            margin-bottom: 20px;
+        }
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            .navbar {
+                flex-direction: column;
+                gap: 15px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <h1>🔔 Kick Monitor</h1>
+        <div class="navbar-right">
+            <span>مرحباً، {{ username }}</span>
+            {% if is_admin %}
+            <a href="/admin" class="btn btn-light">لوحة الإدارة</a>
+            {% endif %}
+            <a href="/logout" class="btn btn-light">تسجيل الخروج</a>
+        </div>
+    </nav>
+
+    <div class="container">
+        <div class="card">
+            <h2>➕ إضافة مراقبة جديدة</h2>
+            <form id="addMonitorForm">
+                <div class="form-row">
+                    <input type="text" id="channel" placeholder="اسم القناة (مثال: xqc)" required>
+                    <input type="text" id="keywords" placeholder="الكلمات المفتاحية (مفصولة بفواصل)" required>
+                    <button type="submit" class="btn btn-primary">إضافة</button>
+                </div>
+            </form>
+        </div>
+
+        <div class="card">
+            <h2>📋 المراقبات النشطة</h2>
+            <div id="monitorsList" class="monitors-list"></div>
+        </div>
+    </div>
+
+    <script>
+        function loadMonitors() {
+            fetch('/api/monitors')
+                .then(res => res.json())
+                .then(data => {
+                    const container = document.getElementById('monitorsList');
+                    const monitors = Object.entries(data);
+                    
+                    if (monitors.length === 0) {
+                        container.innerHTML = `
+                            <div class="empty-state">
+                                <div class="empty-state-icon">📭</div>
+                                <p>لا توجد مراقبات نشطة</p>
+                                <p>أضف مراقبة جديدة للبدء</p>
+                            </div>
+                        `;
+                        return;
+                    }
+                    
+                    container.innerHTML = monitors.map(([id, monitor]) => `
+                        <div class="monitor-item">
+                            <div class="monitor-info">
+                                <h3>📺 ${monitor.channel}</h3>
+                                <div class="monitor-keywords">
+                                    ${monitor.keywords.map(k => `<span class="keyword-badge">${k}</span>`).join('')}
+                                </div>
+                            </div>
+                            <button class="btn btn-danger" onclick="deleteMonitor('${id}')">حذف</button>
+                        </div>
+                    `).join('');
+                });
+        }
+
+        document.getElementById('addMonitorForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const channel = document.getElementById('channel').value;
+            const keywords = document.getElementById('keywords').value;
+            
+            const response = await fetch('/api/monitors', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({channel, keywords})
+            });
+            
+            if (response.ok) {
+                document.getElementById('channel').value = '';
+                document.getElementById('keywords').value = '';
+                loadMonitors();
+                alert('تمت الإضافة بنجاح!');
+            } else {
+                const error = await response.json();
+                alert(error.error || 'حدث خطأ');
+            }
+        });
+
+        async function deleteMonitor(id) {
+            if (!confirm('هل تريد حذف هذه المراقبة؟')) return;
+            
+            const response = await fetch(`/api/monitors/${id}`, {method: 'DELETE'});
+            
+            if (response.ok) {
+                loadMonitors();
+                alert('تم الحذف بنجاح!');
+            }
+        }
+
+        loadMonitors();
+    </script>
+</body>
+</html>
