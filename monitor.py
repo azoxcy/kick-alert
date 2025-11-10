@@ -1,179 +1,141 @@
-import requests
-import json
 import os
 import time
+import json
+import requests
 from datetime import datetime
 
 TELEGRAM_BOT_TOKEN = os.environ.get('TELEGRAM_BOT_TOKEN')
 ADMIN_CHAT_ID = os.environ.get('ADMIN_CHAT_ID')
 
-USERS_FILE = 'data/users.json'
-MONITORS_FILE = 'data/monitors.json'
-HISTORY_FILE = 'data/history.json'
+DATA_FILE = 'data.json'
+SENT_NOTIFICATIONS = {}
 
-def load_json(filename):
-    try:
-        with open(filename, 'r') as f:
+def load_data():
+    if os.path.exists(DATA_FILE):
+        with open(DATA_FILE, 'r') as f:
             return json.load(f)
-    except:
-        return {} if 'users' in filename or 'monitors' in filename else []
-
-def save_json(filename, data):
-    os.makedirs('data', exist_ok=True)
-    with open(filename, 'w') as f:
-        json.dump(data, f, indent=2)
+    return {'users': {}, 'monitors': {}}
 
 def send_telegram_message(chat_id, message):
-    if not TELEGRAM_BOT_TOKEN:
-        print("⚠️ No bot token configured")
-        return False
-    
-    url = f'https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage'
-    data = {
-        'chat_id': chat_id,
-        'text': message,
-        'parse_mode': 'HTML',
-        'disable_web_page_preview': False
-    }
-    
     try:
-        response = requests.post(url, data=data, timeout=10)
-        result = response.json()
-        if result.get('ok'):
-            print(f"✅ Message sent to {chat_id}")
-            return True
-        else:
-            print(f"❌ Failed to send: {result}")
-            return False
-    except Exception as e:
-        print(f"❌ Error sending message: {e}")
-        return False
-
-def check_kick_stream(channel):
-    try:
-        url = f'https://kick.com/api/v2/channels/{channel}'
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+        data = {
+            'chat_id': chat_id,
+            'text': message,
+            'parse_mode': 'HTML'
         }
-        response = requests.get(url, headers=headers, timeout=10)
+        response = requests.post(url, data=data, timeout=10)
+        return response.json()
+    except Exception as e:
+        print(f"Error sending Telegram message: {e}")
+        return None
+
+def check_kick_channel(channel):
+    try:
+        url = f"https://kick.com/api/v2/channels/{channel}"
+        response = requests.get(url, timeout=10)
         
         if response.status_code == 200:
             data = response.json()
-            livestream = data.get('livestream')
             
-            if livestream and livestream.get('is_live'):
+            if data.get('livestream'):
+                livestream = data['livestream']
                 return {
                     'is_live': True,
-                    'title': livestream.get('session_title', ''),
-                    'viewer_count': livestream.get('viewer_count', 0)
+                    'title': livestream.get('session_title', 'No title'),
+                    'viewer_count': livestream.get('viewer_count', 0),
+                    'thumbnail': livestream.get('thumbnail', {}).get('url', ''),
+                    'started_at': livestream.get('created_at', '')
                 }
         
-        return {'is_live': False, 'title': '', 'viewer_count': 0}
+        return {'is_live': False}
     except Exception as e:
-        print(f"❌ Error checking {channel}: {e}")
-        return {'is_live': False, 'title': '', 'viewer_count': 0}
+        print(f"Error checking channel {channel}: {e}")
+        return {'is_live': False}
 
-def check_all_monitors():
-    print("\n" + "="*50)
-    print(f"🔍 Starting monitor check at {datetime.now().strftime('%I:%M %p')}")
-    print("="*50)
-    
-    monitors = load_json(MONITORS_FILE)
-    users = load_json(USERS_FILE)
-    history = load_json(HISTORY_FILE)
-    
-    if not monitors:
-        print("⚠️ No monitors found")
-        return
-    
-    print(f"📊 Checking {len(monitors)} monitors...")
-    
-    notifications_sent = 0
-    
-    for monitor_id, monitor in monitors.items():
-        if monitor.get('status') != 'active':
-            continue
-        
-        channel = monitor['channel']
-        print(f"\n📺 Checking: {channel}")
-        
-        stream_info = check_kick_stream(channel)
-        
-        if not stream_info['is_live']:
-            print(f"   ⚪ Not live")
-            continue
-        
-        current_title = stream_info['title']
-        last_title = monitor.get('last_title', '')
-        
-        print(f"   🔴 Live: {current_title}")
-        
-        if current_title and current_title != last_title:
-            keywords = monitor.get('keywords', [])
-            matched_keyword = None
-            
-            for keyword in keywords:
-                if keyword.lower() in current_title.lower():
-                    matched_keyword = keyword
-                    break
-            
-            if matched_keyword:
-                print(f"   ✅ Keyword matched: {matched_keyword}")
-                
-                user_id = monitor['user_id']
-                chat_id = None
-                username = 'Unknown'
-                
-                if user_id == 'admin':
-                    chat_id = ADMIN_CHAT_ID
-                    username = 'Admin'
-                elif user_id in users:
-                    chat_id = users[user_id].get('chat_id')
-                    username = users[user_id].get('username', 'Unknown')
-                
-                if chat_id:
-                    message = f"🔔 <b>تنبيه جديد!</b>\n\n"
-                    message += f"📺 القناة: <b>{channel}</b>\n"
-                    message += f"📝 العنوان: {current_title}\n"
-                    message += f"✅ تطابق الكلمة: <b>{matched_keyword}</b>\n"
-                    message += f"👥 المشاهدين: {stream_info['viewer_count']}\n"
-                    message += f"🕐 الوقت: {datetime.now().strftime('%I:%M %p')}\n\n"
-                    message += f"🔗 <a href='https://kick.com/{channel}'>شاهد البث</a>"
-                    
-                    if send_telegram_message(chat_id, message):
-                        notifications_sent += 1
-                        
-                        if user_id != 'admin' and ADMIN_CHAT_ID:
-                            admin_message = f"📊 <b>تنبيه من المستخدم:</b> {username}\n\n" + message
-                            send_telegram_message(ADMIN_CHAT_ID, admin_message)
-                        
-                        history.append({
-                            'monitor_id': monitor_id,
-                            'user_id': user_id,
-                            'channel': channel,
-                            'title': current_title,
-                            'keyword': matched_keyword,
-                            'timestamp': datetime.now().isoformat()
-                        })
-            
-            monitor['last_title'] = current_title
-    
-    save_json(MONITORS_FILE, monitors)
-    save_json(HISTORY_FILE, history[-100:])
-    
-    print("\n" + "="*50)
-    print(f"✅ Check complete! Sent {notifications_sent} notifications")
-    print("="*50 + "\n")
+def check_keyword_match(title, keywords):
+    title_lower = title.lower()
+    for keyword in keywords:
+        if keyword.lower() in title_lower:
+            return keyword
+    return None
 
-if __name__ == '__main__':
-    print("🚀 Kick Monitor Started")
-    print(f"⏰ Checking every 2 minutes...")
+def start_monitoring():
+    print("🚀 Monitor started!")
     
     while True:
         try:
-            check_all_monitors()
+            data = load_data()
+            monitors = data.get('monitors', {})
+            users = data.get('users', {})
+            
+            if not monitors:
+                print("⏳ No monitors found, waiting...")
+                time.sleep(120)
+                continue
+            
+            print(f"🔍 Checking {len(monitors)} monitors...")
+            
+            for monitor_id, monitor in monitors.items():
+                channel = monitor['channel']
+                keywords = monitor['keywords']
+                user_id = monitor['user_id']
+                
+                # Get user chat_id
+                user = users.get(user_id, {})
+                user_chat_id = user.get('chat_id')
+                
+                if not user_chat_id:
+                    print(f"⚠️ No chat_id for user {user_id}")
+                    continue
+                
+                # Check channel
+                status = check_kick_channel(channel)
+                
+                if status['is_live']:
+                    title = status['title']
+                    matched_keyword = check_keyword_match(title, keywords)
+                    
+                    if matched_keyword:
+                        notification_key = f"{channel}_{title}"
+                        
+                        if notification_key not in SENT_NOTIFICATIONS:
+                            message = f"""
+🔔 <b>تنبيه جديد!</b>
+
+📺 <b>القناة:</b> {channel}
+📝 <b>العنوان:</b> {title}
+✅ <b>تطابق الكلمة:</b> {matched_keyword}
+👁️ <b>المشاهدين:</b> {status['viewer_count']}
+🕐 <b>الوقت:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+🔗 <a href="https://kick.com/{channel}">شاهد البث</a>
+"""
+                            
+                            # Send to user
+                            send_telegram_message(user_chat_id, message)
+                            print(f"✅ Notification sent to user {user_id} for {channel}")
+                            
+                            # Send to admin
+                            if ADMIN_CHAT_ID:
+                                admin_message = f"👑 <b>نسخة للمدير</b>\n{message}\n👤 <b>المستخدم:</b> {user.get('username', 'Unknown')}"
+                                send_telegram_message(ADMIN_CHAT_ID, admin_message)
+                            
+                            SENT_NOTIFICATIONS[notification_key] = time.time()
+            
+            # Clean old notifications (after 6 hours)
+            current_time = time.time()
+            SENT_NOTIFICATIONS.clear()
+            for key, timestamp in list(SENT_NOTIFICATIONS.items()):
+                if current_time - timestamp > 21600:
+                    del SENT_NOTIFICATIONS[key]
+            
+            print(f"✅ Check completed. Waiting 120 seconds...")
+            time.sleep(120)
+            
         except Exception as e:
-            print(f"❌ Error in main loop: {e}")
-        
-        print("💤 Sleeping for 2 minutes...")
-        time.sleep(120)
+            print(f"❌ Error in monitoring loop: {e}")
+            time.sleep(60)
+
+if __name__ == '__main__':
+    start_monitoring()
