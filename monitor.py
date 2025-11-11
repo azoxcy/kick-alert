@@ -33,8 +33,12 @@ def send_telegram_message(chat_id, message):
         return None
 
 def check_kick_channel(channel):
+    """Check with full debugging"""
     try:
         url = f"https://kick.com/api/v2/channels/{channel}"
+        
+        print(f"   🔗 URL: {url}", flush=True)
+        sys.stdout.flush()
         
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -44,39 +48,86 @@ def check_kick_channel(channel):
             'Origin': 'https://kick.com'
         }
         
-        response = requests.get(url, headers=headers, timeout=10)
+        print(f"   📤 Sending request...", flush=True)
+        sys.stdout.flush()
         
-        print(f"   🌐 API Status: {response.status_code}", flush=True)
+        response = requests.get(url, headers=headers, timeout=15)
+        
+        print(f"   📥 Response Status: {response.status_code}", flush=True)
+        print(f"   📏 Response Size: {len(response.content)} bytes", flush=True)
+        sys.stdout.flush()
+        
+        # Print response headers
+        print(f"   📋 Response Headers:", flush=True)
+        for key, value in list(response.headers.items())[:5]:
+            print(f"      {key}: {value}", flush=True)
         sys.stdout.flush()
         
         if response.status_code == 200:
-            data = response.json()
-            livestream = data.get('livestream')
-            
-            print(f"   📡 Has livestream: {livestream is not None}", flush=True)
-            sys.stdout.flush()
-            
-            if livestream and livestream.get('is_live'):
-                print(f"   🎥 is_live: True", flush=True)
+            try:
+                data = response.json()
+                print(f"   ✅ JSON parsed successfully", flush=True)
+                print(f"   🔑 JSON keys: {list(data.keys())}", flush=True)
                 sys.stdout.flush()
                 
-                return {
-                    'is_live': True,
-                    'title': livestream.get('session_title', 'No title'),
-                    'viewer_count': livestream.get('viewer_count', 0),
-                    'thumbnail': livestream.get('thumbnail', {}).get('url', ''),
-                    'started_at': livestream.get('created_at', '')
-                }
-            else:
-                print(f"   💤 is_live: False or No livestream", flush=True)
+                livestream = data.get('livestream')
+                print(f"   📡 livestream exists: {livestream is not None}", flush=True)
+                
+                if livestream:
+                    print(f"   📊 livestream keys: {list(livestream.keys())[:10]}", flush=True)
+                    is_live = livestream.get('is_live')
+                    print(f"   🎥 is_live value: {is_live}", flush=True)
+                    sys.stdout.flush()
+                    
+                    if is_live:
+                        title = livestream.get('session_title', 'No title')
+                        print(f"   ✅ Stream is LIVE!", flush=True)
+                        sys.stdout.flush()
+                        
+                        return {
+                            'is_live': True,
+                            'title': title,
+                            'viewer_count': livestream.get('viewer_count', 0),
+                            'thumbnail': livestream.get('thumbnail', {}).get('url', ''),
+                            'started_at': livestream.get('created_at', '')
+                        }
+                
+                print(f"   💤 Stream not live", flush=True)
                 sys.stdout.flush()
+                
+            except json.JSONDecodeError as je:
+                print(f"   ❌ JSON Error: {je}", flush=True)
+                print(f"   📄 Response preview: {response.text[:200]}", flush=True)
+                sys.stdout.flush()
+                
+        elif response.status_code == 403:
+            print(f"   🚫 403 Forbidden!", flush=True)
+            print(f"   📄 Response: {response.text[:500]}", flush=True)
+            sys.stdout.flush()
+            
+        elif response.status_code == 404:
+            print(f"   ❓ 404 Not Found - Channel may not exist", flush=True)
+            sys.stdout.flush()
+            
         else:
-            print(f"   ❌ API Error: Status {response.status_code}", flush=True)
+            print(f"   ❌ Unexpected status: {response.status_code}", flush=True)
+            print(f"   📄 Response: {response.text[:300]}", flush=True)
             sys.stdout.flush()
         
         return {'is_live': False}
+        
+    except requests.exceptions.Timeout:
+        print(f"   ⏰ Request timed out", flush=True)
+        sys.stdout.flush()
+        return {'is_live': False}
+        
+    except requests.exceptions.ConnectionError as ce:
+        print(f"   🔌 Connection error: {ce}", flush=True)
+        sys.stdout.flush()
+        return {'is_live': False}
+        
     except Exception as e:
-        print(f"❌ Exception: {e}", flush=True)
+        print(f"   ❌ Exception: {type(e).__name__}: {e}", flush=True)
         sys.stdout.flush()
         return {'is_live': False}
 
@@ -111,14 +162,14 @@ def start_monitoring():
                 keywords = monitor['keywords']
                 user_id = monitor['user_id']
                 
-                print(f"   📺 Channel: {channel}", flush=True)
+                print(f"\n   📺 Channel: {channel}", flush=True)
                 sys.stdout.flush()
                 
                 user = users.get(user_id, {})
                 user_chat_id = user.get('chat_id')
                 
                 if not user_chat_id:
-                    print(f"   ⚠️ No chat_id", flush=True)
+                    print(f"   ⚠️ No chat_id for user", flush=True)
                     sys.stdout.flush()
                     continue
                 
@@ -126,7 +177,7 @@ def start_monitoring():
                 
                 if status['is_live']:
                     title = status['title']
-                    print(f"   ✅ LIVE: {title}", flush=True)
+                    print(f"\n   ✅ LIVE: {title}", flush=True)
                     sys.stdout.flush()
                     
                     matched_keyword = check_keyword_match(title, keywords)
@@ -160,13 +211,13 @@ def start_monitoring():
                             
                             SENT_NOTIFICATIONS[notification_key] = time.time()
                         else:
-                            print(f"   ⏭️ Already sent", flush=True)
+                            print(f"   ⏭️ Already sent notification", flush=True)
                             sys.stdout.flush()
                     else:
                         print(f"   ❌ No keyword match", flush=True)
                         sys.stdout.flush()
                 else:
-                    print(f"   💤 Offline", flush=True)
+                    print(f"   💤 Channel offline\n", flush=True)
                     sys.stdout.flush()
             
             current_time = time.time()
@@ -174,12 +225,12 @@ def start_monitoring():
                 if current_time - timestamp > 21600:
                     del SENT_NOTIFICATIONS[key]
             
-            print(f"✅ Done. Waiting 120s...", flush=True)
+            print(f"\n✅ Check done. Waiting 120s...\n", flush=True)
             sys.stdout.flush()
             time.sleep(120)
             
         except Exception as e:
-            print(f"❌ Loop error: {e}", flush=True)
+            print(f"❌ Loop error: {type(e).__name__}: {e}", flush=True)
             sys.stdout.flush()
             time.sleep(60)
 
