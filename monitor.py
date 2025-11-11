@@ -28,7 +28,7 @@ def send_telegram_message(chat_id, message):
         response = requests.post(url, data=data, timeout=10)
         return response.json()
     except Exception as e:
-        print(f"❌ Error sending Telegram: {e}", flush=True)
+        print(f"❌ Telegram Error: {e}", flush=True)
         sys.stdout.flush()
         return None
 
@@ -37,11 +37,20 @@ def check_kick_channel(channel):
         url = f"https://kick.com/api/v2/channels/{channel}"
         response = requests.get(url, timeout=10)
         
+        print(f"   🌐 API Status: {response.status_code}", flush=True)
+        sys.stdout.flush()
+        
         if response.status_code == 200:
             data = response.json()
+            livestream = data.get('livestream')
             
-            if data.get('livestream'):
-                livestream = data['livestream']
+            print(f"   📡 Has livestream: {livestream is not None}", flush=True)
+            sys.stdout.flush()
+            
+            if livestream and livestream.get('is_live'):
+                print(f"   🎥 is_live: True", flush=True)
+                sys.stdout.flush()
+                
                 return {
                     'is_live': True,
                     'title': livestream.get('session_title', 'No title'),
@@ -49,10 +58,13 @@ def check_kick_channel(channel):
                     'thumbnail': livestream.get('thumbnail', {}).get('url', ''),
                     'started_at': livestream.get('created_at', '')
                 }
+            else:
+                print(f"   💤 is_live: False or No livestream", flush=True)
+                sys.stdout.flush()
         
         return {'is_live': False}
     except Exception as e:
-        print(f"❌ Error checking {channel}: {e}", flush=True)
+        print(f"❌ API Error: {e}", flush=True)
         sys.stdout.flush()
         return {'is_live': False}
 
@@ -87,14 +99,14 @@ def start_monitoring():
                 keywords = monitor['keywords']
                 user_id = monitor['user_id']
                 
-                print(f"   📺 {channel}", flush=True)
+                print(f"   📺 Channel: {channel}", flush=True)
                 sys.stdout.flush()
                 
                 user = users.get(user_id, {})
                 user_chat_id = user.get('chat_id')
                 
                 if not user_chat_id:
-                    print(f"   ⚠️ No chat_id for {user_id}", flush=True)
+                    print(f"   ⚠️ No chat_id", flush=True)
                     sys.stdout.flush()
                     continue
                 
@@ -102,9 +114,12 @@ def start_monitoring():
                 
                 if status['is_live']:
                     title = status['title']
-                    matched_keyword = check_keyword_match(title, keywords)
-                    
                     print(f"   ✅ LIVE: {title}", flush=True)
+                    sys.stdout.flush()
+                    
+                    matched_keyword = check_keyword_match(title, keywords)
+                    print(f"   🔑 Keywords: {keywords}", flush=True)
+                    print(f"   🎯 Matched: {matched_keyword}", flush=True)
                     sys.stdout.flush()
                     
                     if matched_keyword:
@@ -124,7 +139,7 @@ def start_monitoring():
 """
                             
                             send_telegram_message(user_chat_id, message)
-                            print(f"   📤 Sent to {user_id}", flush=True)
+                            print(f"   📤 Notification sent!", flush=True)
                             sys.stdout.flush()
                             
                             if ADMIN_CHAT_ID:
