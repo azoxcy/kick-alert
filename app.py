@@ -1,9 +1,7 @@
 from flask import Flask, render_template, request, redirect, session, jsonify
 import os
 import json
-import threading
 from datetime import datetime
-from monitor import start_monitoring
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'default-secret-key')
@@ -36,6 +34,9 @@ def init_admin():
             'status': 'active'
         }
         save_data(data)
+
+# Initialize admin on startup
+init_admin()
 
 @app.route('/')
 def index():
@@ -172,16 +173,6 @@ def delete_user(user_id):
     
     return jsonify({'error': 'Not found'}), 404
 
-def run_monitor():
-    print("🚀 Starting monitor in background...")
-    start_monitoring()
-
 if __name__ == '__main__':
-    init_admin()
-    
-    # Start monitor in background thread
-    monitor_thread = threading.Thread(target=run_monitor, daemon=True)
-    monitor_thread.start()
-    
     port = int(os.environ.get('PORT', 5000))
     app.run(host='0.0.0.0', port=port)
