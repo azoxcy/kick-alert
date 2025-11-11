@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import json
 import requests
@@ -27,7 +28,8 @@ def send_telegram_message(chat_id, message):
         response = requests.post(url, data=data, timeout=10)
         return response.json()
     except Exception as e:
-        print(f"Error sending Telegram message: {e}")
+        print(f"❌ Error sending Telegram: {e}", flush=True)
+        sys.stdout.flush()
         return None
 
 def check_kick_channel(channel):
@@ -50,7 +52,8 @@ def check_kick_channel(channel):
         
         return {'is_live': False}
     except Exception as e:
-        print(f"Error checking channel {channel}: {e}")
+        print(f"❌ Error checking {channel}: {e}", flush=True)
+        sys.stdout.flush()
         return {'is_live': False}
 
 def check_keyword_match(title, keywords):
@@ -61,7 +64,8 @@ def check_keyword_match(title, keywords):
     return None
 
 def start_monitoring():
-    print("🚀 Monitor started!")
+    print("🚀 Monitor started!", flush=True)
+    sys.stdout.flush()
     
     while True:
         try:
@@ -70,31 +74,38 @@ def start_monitoring():
             users = data.get('users', {})
             
             if not monitors:
-                print("⏳ No monitors found, waiting...")
+                print("⏳ No monitors, waiting 120s...", flush=True)
+                sys.stdout.flush()
                 time.sleep(120)
                 continue
             
-            print(f"🔍 Checking {len(monitors)} monitors...")
+            print(f"🔍 Checking {len(monitors)} monitors...", flush=True)
+            sys.stdout.flush()
             
             for monitor_id, monitor in monitors.items():
                 channel = monitor['channel']
                 keywords = monitor['keywords']
                 user_id = monitor['user_id']
                 
-                # Get user chat_id
+                print(f"   📺 {channel}", flush=True)
+                sys.stdout.flush()
+                
                 user = users.get(user_id, {})
                 user_chat_id = user.get('chat_id')
                 
                 if not user_chat_id:
-                    print(f"⚠️ No chat_id for user {user_id}")
+                    print(f"   ⚠️ No chat_id for {user_id}", flush=True)
+                    sys.stdout.flush()
                     continue
                 
-                # Check channel
                 status = check_kick_channel(channel)
                 
                 if status['is_live']:
                     title = status['title']
                     matched_keyword = check_keyword_match(title, keywords)
+                    
+                    print(f"   ✅ LIVE: {title}", flush=True)
+                    sys.stdout.flush()
                     
                     if matched_keyword:
                         notification_key = f"{channel}_{title}"
@@ -112,29 +123,37 @@ def start_monitoring():
 🔗 <a href="https://kick.com/{channel}">شاهد البث</a>
 """
                             
-                            # Send to user
                             send_telegram_message(user_chat_id, message)
-                            print(f"✅ Notification sent to user {user_id} for {channel}")
+                            print(f"   📤 Sent to {user_id}", flush=True)
+                            sys.stdout.flush()
                             
-                            # Send to admin
                             if ADMIN_CHAT_ID:
-                                admin_message = f"👑 <b>نسخة للمدير</b>\n{message}\n👤 <b>المستخدم:</b> {user.get('username', 'Unknown')}"
-                                send_telegram_message(ADMIN_CHAT_ID, admin_message)
+                                admin_msg = f"👑 <b>نسخة للمدير</b>\n{message}\n👤 <b>المستخدم:</b> {user.get('username', 'Unknown')}"
+                                send_telegram_message(ADMIN_CHAT_ID, admin_msg)
                             
                             SENT_NOTIFICATIONS[notification_key] = time.time()
+                        else:
+                            print(f"   ⏭️ Already sent", flush=True)
+                            sys.stdout.flush()
+                    else:
+                        print(f"   ❌ No keyword match", flush=True)
+                        sys.stdout.flush()
+                else:
+                    print(f"   💤 Offline", flush=True)
+                    sys.stdout.flush()
             
-            # Clean old notifications (after 6 hours)
             current_time = time.time()
-            SENT_NOTIFICATIONS.clear()
             for key, timestamp in list(SENT_NOTIFICATIONS.items()):
                 if current_time - timestamp > 21600:
                     del SENT_NOTIFICATIONS[key]
             
-            print(f"✅ Check completed. Waiting 120 seconds...")
+            print(f"✅ Done. Waiting 120s...", flush=True)
+            sys.stdout.flush()
             time.sleep(120)
             
         except Exception as e:
-            print(f"❌ Error in monitoring loop: {e}")
+            print(f"❌ Loop error: {e}", flush=True)
+            sys.stdout.flush()
             time.sleep(60)
 
 if __name__ == '__main__':
