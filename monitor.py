@@ -122,4 +122,35 @@ def start_monitoring():
 📺 <b>القناة:</b> {channel}
 📝 <b>العنوان:</b> {title}
 ✅ <b>تطابق الكلمة:</b> {matched_keyword}
-👁️ <
+👁️ <b>المشاهدين:</b> {status['viewer_count']}
+🕐 <b>الوقت:</b> {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
+
+🔗 <a href="https://kick.com/{channel}">شاهد البث</a>
+"""
+                            send_telegram_message(user_chat_id, message)
+                            print(f"   📤 Notification sent!", flush=True)
+                            sys.stdout.flush()
+                            if ADMIN_CHAT_ID:
+                                admin_msg = f"👑 <b>نسخة للمدير</b>\n{message}\n👤 <b>المستخدم:</b> {user.get('username', 'Unknown')}"
+                                send_telegram_message(ADMIN_CHAT_ID, admin_msg)
+                            SENT_NOTIFICATIONS[notification_key] = time.time()
+                        else:
+                            print(f"   ⏭️ Already sent", flush=True)
+                            sys.stdout.flush()
+                    else:
+                        print(f"   ❌ No keyword match", flush=True)
+                        sys.stdout.flush()
+            current_time = time.time()
+            for key, timestamp in list(SENT_NOTIFICATIONS.items()):
+                if current_time - timestamp > 21600:
+                    del SENT_NOTIFICATIONS[key]
+            print(f"\n✅ Done. Waiting 120s...\n", flush=True)
+            sys.stdout.flush()
+            time.sleep(120)
+        except Exception as e:
+            print(f"❌ Loop error: {e}", flush=True)
+            sys.stdout.flush()
+            time.sleep(60)
+
+if __name__ == '__main__':
+    start_monitoring()
