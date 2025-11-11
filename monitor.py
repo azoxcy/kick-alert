@@ -35,7 +35,16 @@ def send_telegram_message(chat_id, message):
 def check_kick_channel(channel):
     try:
         url = f"https://kick.com/api/v2/channels/{channel}"
-        response = requests.get(url, timeout=10)
+        
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'application/json',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Referer': 'https://kick.com/',
+            'Origin': 'https://kick.com'
+        }
+        
+        response = requests.get(url, headers=headers, timeout=10)
         
         print(f"   🌐 API Status: {response.status_code}", flush=True)
         sys.stdout.flush()
@@ -61,10 +70,13 @@ def check_kick_channel(channel):
             else:
                 print(f"   💤 is_live: False or No livestream", flush=True)
                 sys.stdout.flush()
+        else:
+            print(f"   ❌ API Error: Status {response.status_code}", flush=True)
+            sys.stdout.flush()
         
         return {'is_live': False}
     except Exception as e:
-        print(f"❌ API Error: {e}", flush=True)
+        print(f"❌ Exception: {e}", flush=True)
         sys.stdout.flush()
         return {'is_live': False}
 
